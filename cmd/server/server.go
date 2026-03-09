@@ -31,7 +31,7 @@ type server struct {
 
 // CreateNetwork calls a method from mdclient to create a network
 func (s *server) CreateNetwork(ctx context.Context, req *l2sces.CreateNetworkRequest) (*l2sces.CreateNetworkResponse, error) {
-	err := s.MDClient.CreateNetwork(req.GetNetwork(), req.GetNamespace())
+	err := s.MDClient.ApplyNetwork(req.GetNetwork(), req.GetNamespace())
 	// Call the mdclient.CreateNetwork method (to be implemented later)
 	if err != nil {
 		return nil, fmt.Errorf("could not create network: %v", err)
@@ -50,7 +50,7 @@ func (s *server) DeleteNetwork(ctx context.Context, req *l2sces.DeleteNetworkReq
 }
 
 func (s *server) CreateSlice(ctx context.Context, req *l2sces.CreateSliceRequest) (*l2sces.CreateSliceResponse, error) {
-	err := s.MDClient.CreateSlice(req.GetSlice(), req.GetNamespace())
+	err := s.MDClient.ApplySlice(req.GetSlice(), req.GetNamespace())
 
 	if err != nil {
 		return nil, fmt.Errorf("could now create slice: %v", err)

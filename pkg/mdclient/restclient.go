@@ -41,7 +41,7 @@ type RestClient struct {
 	ManagerClusterConfig rest.Config
 }
 
-func (restcli *RestClient) CreateNetwork(network *l2sces.L2Network, namespace string) error {
+func (restcli *RestClient) ApplyNetwork(network *l2sces.L2Network, namespace string) error {
 
 	fmt.Printf("Creating network %s", network.GetName())
 	namespace = utils.DefaultIfEmpty(namespace, "default")
@@ -149,7 +149,7 @@ func (restcli *RestClient) DeleteNetwork(network *l2sces.L2Network, namespace st
 
 }
 
-func (restcli *RestClient) CreateSlice(slice *l2sces.Slice, namespace string) error {
+func (restcli *RestClient) ApplySlice(slice *l2sces.Slice, namespace string) error {
 
 	fmt.Printf("Creating slice %s", slice)
 

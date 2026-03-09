@@ -25,12 +25,13 @@ type ClientType string
 
 const (
 	RestType ClientType = "rest"
+	OCMType  ClientType = "ocm"
 )
 
 type MDClient interface {
-	CreateNetwork(network *l2sces.L2Network, namespace string) error
+	ApplyNetwork(network *l2sces.L2Network, namespace string) error
 	DeleteNetwork(network *l2sces.L2Network, namespace string) error
-	CreateSlice(slice *l2sces.Slice, namespace string) error
+	ApplySlice(slice *l2sces.Slice, namespace string) error
 	DeleteSlice(slice *l2sces.Slice, namespace string) error
 }
 
@@ -47,6 +48,9 @@ func NewClient(clientType ClientType, config ...interface{}) (MDClient, error) {
 			}
 		}
 		client := &RestClient{ManagerClusterConfig: clusterConfig}
+		return client, nil
+	case OCMType:
+		client := &OCMClient{}
 		return client, nil
 	default:
 		return nil, errors.New("unsupported client type")
