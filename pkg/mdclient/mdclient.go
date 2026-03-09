@@ -18,7 +18,11 @@ import (
 	"errors"
 
 	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ClientType string
@@ -50,7 +54,31 @@ func NewClient(clientType ClientType, config ...interface{}) (MDClient, error) {
 		client := &RestClient{ManagerClusterConfig: clusterConfig}
 		return client, nil
 	case OCMType:
-		client := &OCMClient{}
+		var clusterConfig *rest.Config
+		for _, cfg := range config {
+			if c, ok := cfg.(*rest.Config); ok {
+				clusterConfig = c
+				break
+			}
+		}
+		if clusterConfig == nil {
+			return nil, errors.New("ocm client requires a hub rest config")
+		}
+
+		scheme := runtime.NewScheme()
+		if err := clusterv1.Install(scheme); err != nil {
+			return nil, err
+		}
+		if err := workv1.Install(scheme); err != nil {
+			return nil, err
+		}
+
+		kclient, err := ctrlclient.New(clusterConfig, ctrlclient.Options{Scheme: scheme})
+		if err != nil {
+			return nil, err
+		}
+
+		client := &OCMClient{kclient: kclient}
 		return client, nil
 	default:
 		return nil, errors.New("unsupported client type")
