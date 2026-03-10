@@ -18,19 +18,30 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	l2smv1 "github.com/Networks-it-uc3m/L2S-M/api/v1"
+	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	l2scesv1 "github.com/Networks-it-uc3m/l2sc-es/api/v1"
+	"github.com/Networks-it-uc3m/l2sc-es/internal/env"
+	"github.com/Networks-it-uc3m/l2sc-es/pkg/mdclient"
 )
+
+const sliceOverlayFinalizer = "l2sces.l2sm.io/sliceoverlay-cleanup"
 
 // SliceOverlayReconciler reconciles a SliceOverlay object
 type SliceOverlayReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	MDClient mdclient.MDClient
 }
 
 // +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=sliceoverlays,verbs=get;list;watch;create;update;patch;delete
@@ -47,17 +58,129 @@ type SliceOverlayReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.22.4/pkg/reconcile
 func (r *SliceOverlayReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	sliceOverlay := &l2scesv1.SliceOverlay{}
+	if err := r.Get(ctx, req.NamespacedName, sliceOverlay); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
 
+	if r.MDClient == nil {
+		return ctrl.Result{}, fmt.Errorf("multi-domain client is not initialized")
+	}
+
+	l2Slice := sliceOverlayToL2SCES(sliceOverlay)
+	if !sliceOverlay.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(sliceOverlay, sliceOverlayFinalizer) {
+			if err := r.MDClient.DeleteSlice(l2Slice, sliceOverlay.Namespace); err != nil {
+				log.Error(err, "failed to delete slice", "sliceOverlay", req.NamespacedName)
+				return ctrl.Result{}, err
+			}
+
+			controllerutil.RemoveFinalizer(sliceOverlay, sliceOverlayFinalizer)
+			if err := r.Update(ctx, sliceOverlay); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+
+		log.Info("deleted slice overlay", "sliceOverlay", req.NamespacedName)
+		return ctrl.Result{}, nil
+	}
+
+	if !controllerutil.ContainsFinalizer(sliceOverlay, sliceOverlayFinalizer) {
+		controllerutil.AddFinalizer(sliceOverlay, sliceOverlayFinalizer)
+		if err := r.Update(ctx, sliceOverlay); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	if err := r.MDClient.ApplySlice(l2Slice, sliceOverlay.Namespace); err != nil {
+		log.Error(err, "failed to apply slice", "sliceOverlay", req.NamespacedName)
+		return ctrl.Result{}, err
+	}
+
+	log.Info("reconciled slice overlay", "sliceOverlay", req.NamespacedName, "clusters", len(l2Slice.GetClusters()))
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SliceOverlayReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.MDClient == nil {
+		mdcli, err := newMDClient(mgr.GetConfig())
+		if err != nil {
+			return err
+		}
+		r.MDClient = mdcli
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&l2scesv1.SliceOverlay{}).
 		Named("sliceoverlay").
 		Complete(r)
+}
+
+func newMDClient(config *rest.Config) (mdclient.MDClient, error) {
+	clientType := mdclient.ClientType(env.GetMultiDomainClientType())
+	return mdclient.NewClient(clientType, config)
+}
+
+func sliceOverlayToL2SCES(sliceOverlay *l2scesv1.SliceOverlay) *l2sces.Slice {
+	slice := &l2sces.Slice{
+		Provider: providerSpecToProto(sliceOverlay.Spec.Provider),
+		Clusters: make([]*l2sces.Cluster, 0),
+		Links:    make([]*l2sces.Link, 0),
+	}
+
+	if sliceOverlay.Spec.Topology == nil {
+		return slice
+	}
+
+	slice.Clusters = make([]*l2sces.Cluster, 0, len(sliceOverlay.Spec.Topology.Nodes))
+	for _, node := range sliceOverlay.Spec.Topology.Nodes {
+		cluster := &l2sces.Cluster{
+			Name: node.Name,
+		}
+
+		if node.Gateway != nil {
+			cluster.GatewayNode = &l2sces.Node{
+				Name:      node.Gateway.NodeName,
+				IpAddress: node.Gateway.IPAddress,
+			}
+		}
+
+		slice.Clusters = append(slice.Clusters, cluster)
+	}
+
+	slice.Links = make([]*l2sces.Link, 0, len(sliceOverlay.Spec.Topology.Links))
+	for _, link := range sliceOverlay.Spec.Topology.Links {
+		slice.Links = append(slice.Links, &l2sces.Link{
+			EndpointA: link.EndpointA,
+			EndpointB: link.EndpointB,
+		})
+	}
+
+	return slice
+}
+
+func providerSpecToProto(provider *l2smv1.ProviderSpec) *l2sces.Provider {
+	if provider == nil {
+		return &l2sces.Provider{}
+	}
+
+	domain := ""
+	if len(provider.Domain) > 0 {
+		domain = provider.Domain[0]
+	}
+
+	return &l2sces.Provider{
+		Name:        provider.Name,
+		Domain:      domain,
+		DnsPort:     provider.DNSPort,
+		SdnPort:     provider.SDNPort,
+		OfPort:      provider.OFPort,
+		DnsGrpcPort: provider.DNSGRPCPort,
+	}
 }

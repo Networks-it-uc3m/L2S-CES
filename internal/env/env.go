@@ -40,3 +40,7 @@ func GetDefaultDNSPort() string {
 func GetDefaultOFPort() string {
 	return getEnv("DEFAULT_OF_PORT", "30663")
 }
+
+func GetMultiDomainClientType() string {
+	return getEnv("MULTI_DOMAIN_CLIENT_TYPE", "ocm")
+}
