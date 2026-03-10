@@ -226,7 +226,7 @@ func (restcli *RestClient) ApplySlice(slice *l2sces.Slice, namespace string) err
 			}
 
 			ned := nedGenerator.ConstructNED(l2sminterface.NEDValues{
-				NodeConfig: l2sminterface.NodeConfig{NodeName: cluster.GetGatewayNode().GetName(), IPAddress: cluster.GetGatewayNode().GetIpAddress()},
+				NodeConfig: &l2sminterface.NodeConfig{NodeName: cluster.GetGatewayNode().GetName(), IPAddress: cluster.GetGatewayNode().GetIpAddress()},
 				Neighbors:  clusterNeighbors})
 
 			unstructuredNED, err := runtime.DefaultUnstructuredConverter.ToUnstructured(ned)

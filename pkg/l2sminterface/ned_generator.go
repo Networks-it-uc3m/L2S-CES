@@ -17,14 +17,13 @@ package l2sminterface
 import (
 	l2smv1 "github.com/Networks-it-uc3m/L2S-M/api/v1"
 	"github.com/Networks-it-uc3m/l2sc-es/internal/env"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const SWITCH_DOCKER_IMAGE = "alexdecb/l2sm-switch:1.2.9"
 
 type NEDValues struct {
-	NodeConfig NodeConfig
+	NodeConfig *NodeConfig
 	Neighbors  []Neighbor
 }
 
@@ -83,12 +82,20 @@ func NewNEDGenerator(sdnController SDNController) *NEDGenerator {
 		}}
 }
 func (nedGenerator *NEDGenerator) ConstructNED(nedValues NEDValues) *l2smv1.NetworkEdgeDevice {
+	var nodeConf *l2smv1.NodeConfigSpec
+	if nedValues.NodeConfig != nil {
+		nodeConf = &l2smv1.NodeConfigSpec{
+			NodeName:  nedValues.NodeConfig.NodeName,
+			IPAddress: nedValues.NodeConfig.IPAddress,
+		}
+	}
 
 	neighbors := make([]l2smv1.NeighborSpec, len(nedValues.Neighbors))
 	for i := range neighbors {
 		neighbors[i].Node = nedValues.Neighbors[i].Node
 		neighbors[i].Domain = nedValues.Neighbors[i].Domain
 	}
+
 	ned := &l2smv1.NetworkEdgeDevice{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       GetKind(NetworkEdgeDevice),
@@ -106,44 +113,10 @@ func (nedGenerator *NEDGenerator) ConstructNED(nedValues NEDValues) *l2smv1.Netw
 				DNSPort:     nedGenerator.Provider.DNSPort,
 				DNSGRPCPort: nedGenerator.Provider.DNSGRPCPort,
 			},
-			NodeConfig: &l2smv1.NodeConfigSpec{
-				NodeName:  nedValues.NodeConfig.NodeName,
-				IPAddress: nedValues.NodeConfig.IPAddress,
-			},
-			Neighbors:      neighbors,
-			SwitchTemplate: defaultNEDTemplate(),
+			NodeConfig: nodeConf,
+			Neighbors:  neighbors,
 		},
 	}
+
 	return ned
-
-}
-
-func defaultNEDTemplate() *l2smv1.SwitchTemplateSpec {
-	return &l2smv1.SwitchTemplateSpec{
-		Spec: l2smv1.SwitchPodSpec{
-			HostNetwork: true,
-			Containers: []corev1.Container{
-				{
-					Name:    "l2sm-ned",
-					Image:   SWITCH_DOCKER_IMAGE,
-					Command: []string{"./setup_ned.sh"},
-					Env: []corev1.EnvVar{
-						{
-							Name: "NODENAME",
-							ValueFrom: &corev1.EnvVarSource{
-								FieldRef: &corev1.ObjectFieldSelector{
-									FieldPath: "spec.nodeName",
-								},
-							},
-						},
-					},
-					SecurityContext: &corev1.SecurityContext{
-						Capabilities: &corev1.Capabilities{
-							Add: []corev1.Capability{"NET_ADMIN"},
-						},
-					},
-				},
-			},
-		},
-	}
 }

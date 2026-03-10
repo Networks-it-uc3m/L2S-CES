@@ -140,11 +140,8 @@ func (c *OCMClient) ApplySlice(slice *l2sces.Slice, namespace string) error {
 			}
 		}
 
-		nodeConfig := clusterMaps[cluster.GetName()]
-
 		ned := nedGenerator.ConstructNED(l2sminterface.NEDValues{
-			NodeConfig: nodeConfig,
-			Neighbors:  clusterNeighbors,
+			Neighbors: clusterNeighbors,
 		})
 		ned.Namespace = clusterNamespace
 
