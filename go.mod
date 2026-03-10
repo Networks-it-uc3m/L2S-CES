@@ -8,6 +8,7 @@ require (
 	github.com/onsi/gomega v1.36.1
 	google.golang.org/grpc v1.72.1
 	google.golang.org/protobuf v1.36.5
+	open-cluster-management.io/api v1.1.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
