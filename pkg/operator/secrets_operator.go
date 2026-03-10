@@ -20,6 +20,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -46,17 +47,19 @@ func GetClusterCertificates(clusterConfig *rest.Config) (map[string][]byte, erro
 
 	return clusterList, nil
 }
-func CreateCertificateSecrets(clusterConfig *rest.Config, namespace string, clusterName string, certificateData []byte) error {
+func ApplyCertificateSecrets(clusterConfig *rest.Config, namespace string, clusterName string, certificateData []byte) error {
 
 	clientset, err := kubernetes.NewForConfig(clusterConfig)
 	if err != nil {
 		return fmt.Errorf("could not create new cluster client: %v", err)
 	}
 
-	// Define the secret
+	secretName := fmt.Sprintf("%s-cert", clusterName)
+
+	// Define the desired secret state.
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("%s-cert", clusterName),
+			Name: secretName,
 			Labels: map[string]string{
 				"l2sm-cert": clusterName,
 			},
@@ -67,11 +70,30 @@ func CreateCertificateSecrets(clusterConfig *rest.Config, namespace string, clus
 		Type: corev1.SecretTypeOpaque,
 	}
 
-	// Create the secret
-	_, err = clientset.CoreV1().Secrets(namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
+	existingSecret, err := clientset.CoreV1().Secrets(namespace).Get(context.TODO(), secretName, metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to create secret: %v", err)
+		if apierrors.IsNotFound(err) {
+			_, err = clientset.CoreV1().Secrets(namespace).Create(context.TODO(), secret, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create secret: %v", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get secret: %v", err)
+	}
+
+	existingSecret.Labels = secret.Labels
+	existingSecret.Data = secret.Data
+	existingSecret.Type = secret.Type
+
+	_, err = clientset.CoreV1().Secrets(namespace).Update(context.TODO(), existingSecret, metav1.UpdateOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to update secret: %v", err)
 	}
 
 	return nil
+}
+
+func CreateCertificateSecrets(clusterConfig *rest.Config, namespace string, clusterName string, certificateData []byte) error {
+	return ApplyCertificateSecrets(clusterConfig, namespace, clusterName, certificateData)
 }

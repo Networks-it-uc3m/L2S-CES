@@ -65,11 +65,11 @@ func main() {
 		panic(err)
 	}
 
-	// Create the secret
-	err = operator.CreateCertificateSecrets(config, *namespace, *clusterName, certificate)
+	// Apply the secret
+	err = operator.ApplyCertificateSecrets(config, *namespace, *clusterName, certificate)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("Secret created successfully.")
+	fmt.Println("Secret applied successfully.")
 }
