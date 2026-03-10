@@ -10,8 +10,8 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-HUB=hub
-WORKER=cluster
+include config.mk
+
 # CONTAINER_TOOL defines the container tool to be used for building images.
 # Be aware that the target commands are only tested with Docker which is
 # scaffolded by default. However, you might want to replace it to use other
@@ -244,7 +244,7 @@ install-l2sm:
 		$(KUBECTL) --context kind-$$WORKER$$number wait --for=condition=Ready pods --all -A --timeout=300s; \
 	done; \
 	for number in $(shell seq 1 ${WORKER_CLUSTER_NUM}); do \
-		$(KUBECTL) --context kind-$$WORKER$$number apply -f https://raw.githubusercontent.com/Networks-it-uc3m/L2S-M/refs/heads/main/deployments/l2sm-deployment.yaml; \
+		$(KUBECTL) --context kind-$$WORKER$$number apply -f $$L2SM_DEPLOYMENT; \
 	done
 
 .PHONY: add-cni
