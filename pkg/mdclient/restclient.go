@@ -29,6 +29,7 @@ import (
 	"github.com/Networks-it-uc3m/l2sc-es/pkg/operator"
 	"github.com/Networks-it-uc3m/l2sc-es/pkg/topologygenerator"
 	"github.com/Networks-it-uc3m/l2sc-es/pkg/utils"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -264,6 +265,45 @@ func (restcli *RestClient) ApplySlice(slice *l2sces.Slice, namespace string) err
 }
 
 func (restcli *RestClient) DeleteSlice(slice *l2sces.Slice, namespace string) error {
+	clusterCrts, err := operator.GetClusterCertificates(&restcli.ManagerClusterConfig)
+	if err != nil {
+		return fmt.Errorf("could not get cluster certificates error: %v", err)
+	}
+
+	fmt.Printf("Deleting slice %s", slice)
+	namespace = utils.DefaultIfEmpty(namespace, "default")
+
+	nedName := slice.GetProvider().GetName() + "-ned"
+
+	for _, cluster := range slice.GetClusters() {
+		clusterConfig := &rest.Config{
+			Host:        cluster.RestConfig.ApiKey,
+			BearerToken: cluster.RestConfig.BearerToken,
+			TLSClientConfig: rest.TLSClientConfig{
+				Insecure: false,
+				CAData:   clusterCrts[cluster.Name],
+			},
+		}
+		dynClient, err := dynamic.NewForConfig(clusterConfig)
+		if err != nil {
+			return fmt.Errorf("error contacting cluster %s: %v", clusterConfig.String(), err)
+		}
+
+		clusterNamespace := utils.DefaultIfEmpty(cluster.Namespace, namespace)
+
+		nedResource := l2sminterface.GetGVR(l2sminterface.NetworkEdgeDevice)
+		err = dynClient.Resource(nedResource).Namespace(clusterNamespace).Delete(context.Background(), nedName, metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("error deleting network edge device %s in cluster %s: %v", nedName, cluster.Name, err)
+		}
+
+		overlayResource := l2sminterface.GetGVR(l2sminterface.Overlay)
+		err = dynClient.Resource(overlayResource).Namespace(clusterNamespace).Delete(context.Background(), "overlay-sample", metav1.DeleteOptions{})
+		if err != nil && !apierrors.IsNotFound(err) {
+			return fmt.Errorf("error deleting overlay in cluster %s: %v", cluster.Name, err)
+		}
+	}
+
 	return nil
 }
 
