@@ -166,27 +166,27 @@ setup-dev: create-control-plane create-workers add-cni install-l2sm deploy-dev
 
 .PHONY: create-control-plane
 create-control-plane:
-	if $(KIND) get clusters | grep -q $$HUB; then \
-		echo "Cluster $$HUB already exists. Skipping creation."; \
+	if $(KIND) get clusters | grep -q "$(HUB)"; then \
+		echo "Cluster $(HUB) already exists. Skipping creation."; \
 	else \
-		$(KIND) create cluster --config ./examples/quickstart/control-plane-cluster.yaml; --name $$HUB;  \
+		$(KIND) create cluster --config ./examples/quickstart/control-plane-cluster.yaml --name $(HUB);  \
 	fi
 
 .PHONY: create-workers
 create-workers:
 	for number in $(shell seq 1 ${WORKER_CLUSTER_NUM}); do \
-		if $(KIND) get clusters | grep -q "$$WORKER$$number"; then \
+		if $(KIND) get clusters | grep -q "$(WORKER)$$number"; then \
 			echo "Cluster 'cluster$$number' already exists. Skipping creation."; \
 		else \
-			$(KIND) create cluster --config ./examples/quickstart/worker-cluster.yaml --name $$WORKER$$number; \
+			$(KIND) create cluster --config ./examples/quickstart/worker-cluster.yaml --name $(WORKER)$$number; \
 		fi; \
-		$(KUBECTL) config view -o jsonpath='{.clusters[?(@.name == "kind-$$WORKER'$$number'")].cluster.certificate-authority-data}' --raw | base64 -d > config/certs/$$WORKER$$number.key; \
+		$(KUBECTL) config view -o jsonpath='{.clusters[?(@.name == "kind-$(WORKER)'$$number'")].cluster.certificate-authority-data}' --raw | base64 -d > config/certs/$(WORKER)$$number.key; \
 	done
 
 
 .PHONY: deploy-dev
 deploy-dev: apply-cert kustomize
-	$(KUBECTL) config use-context $(HUB)
+	$(KUBECTL) config use-context kind-$(HUB)
 	$(KUSTOMIZE) build config/dev | $(KUBECTL) apply -f - 
 	
 .PHONY: undeploy-dev
@@ -221,7 +221,7 @@ CERT_FILES := $(shell find ./config/certs/ -name "*.key")
 
 .PHONY: apply-cert
 apply-cert: build
-	$(KUBECTL) config use-context kind-$$HUB
+	$(KUBECTL) config use-context kind-$(HUB)
 	@if [ -n "$(CERT_FILES)" ]; then \
 		for file in $(CERT_FILES); do \
 			clustername=$$(basename $${file} .key); \
@@ -237,14 +237,14 @@ all: build
 .PHONY: install-l2sm
 install-l2sm:
 	for number in $(shell seq 1 ${WORKER_CLUSTER_NUM}); do \
-		$(KUBECTL) apply --context kind-$$WORKER$$number -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml; \
-		$(KUBECTL) apply --context kind-$$WORKER$$number -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset-thick.yml; \
+		$(KUBECTL) apply --context kind-$(WORKER)$$number -f https://github.com/cert-manager/cert-manager/releases/download/v1.16.1/cert-manager.yaml; \
+		$(KUBECTL) apply --context kind-$(WORKER)$$number -f https://raw.githubusercontent.com/k8snetworkplumbingwg/multus-cni/master/deployments/multus-daemonset-thick.yml; \
 	done; \
 	for number in $(shell seq 1 ${WORKER_CLUSTER_NUM}); do \
-		$(KUBECTL) --context kind-$$WORKER$$number wait --for=condition=Ready pods --all -A --timeout=300s; \
+		$(KUBECTL) --context kind-$(WORKER)$$number wait --for=condition=Ready pods --all -A --timeout=300s; \
 	done; \
 	for number in $(shell seq 1 ${WORKER_CLUSTER_NUM}); do \
-		$(KUBECTL) --context kind-$$WORKER$$number apply -f $$L2SM_DEPLOYMENT; \
+		$(KUBECTL) --context kind-$(WORKER)$$number apply -f $(L2SM_DEPLOYMENT); \
 	done
 
 .PHONY: add-cni
