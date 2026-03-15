@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -69,10 +68,9 @@ func (r *SliceNetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("multi-domain client is not initialized")
 	}
 
-	l2Network := sliceNetworkToL2SCES(sliceNetwork)
 	if !sliceNetwork.DeletionTimestamp.IsZero() {
 		if controllerutil.ContainsFinalizer(sliceNetwork, sliceNetworkFinalizer) {
-			if err := r.MDClient.DeleteNetwork(l2Network, sliceNetwork.Namespace); err != nil {
+			if err := r.MDClient.DeleteNetwork(sliceNetwork, sliceNetwork.Namespace); err != nil {
 				log.Error(err, "failed to delete network", "sliceNetwork", req.NamespacedName)
 				return ctrl.Result{}, err
 			}
@@ -94,12 +92,12 @@ func (r *SliceNetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	if err := r.MDClient.ApplyNetwork(l2Network, sliceNetwork.Namespace); err != nil {
+	if err := r.MDClient.ApplyNetwork(sliceNetwork, sliceNetwork.Namespace); err != nil {
 		log.Error(err, "failed to apply network", "sliceNetwork", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
 
-	log.Info("reconciled slice network", "sliceNetwork", req.NamespacedName, "clusters", len(l2Network.GetClusters()))
+	log.Info("reconciled slice network", "sliceNetwork", req.NamespacedName, "clusters", len(sliceNetwork.Spec.Clusters))
 	return ctrl.Result{}, nil
 }
 
@@ -117,21 +115,4 @@ func (r *SliceNetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&l2scesv1.SliceNetwork{}).
 		Named("slicenetwork").
 		Complete(r)
-}
-
-func sliceNetworkToL2SCES(sliceNetwork *l2scesv1.SliceNetwork) *l2sces.L2Network {
-	network := &l2sces.L2Network{
-		Name:     sliceNetwork.Name,
-		Provider: providerSpecToProto(sliceNetwork.Spec.Provider),
-		Type:     string(sliceNetwork.Spec.Type),
-		Clusters: make([]*l2sces.Cluster, 0, len(sliceNetwork.Spec.Clusters)),
-	}
-
-	for _, clusterName := range sliceNetwork.Spec.Clusters {
-		network.Clusters = append(network.Clusters, &l2sces.Cluster{
-			Name: clusterName,
-		})
-	}
-
-	return network
 }
