@@ -21,8 +21,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
+	l2smv1 "github.com/Networks-it-uc3m/L2S-M/api/v1"
+	l2scesv1 "github.com/Networks-it-uc3m/l2sc-es/api/v1"
 	"github.com/Networks-it-uc3m/l2sc-es/pkg/l2sminterface"
+	"github.com/Networks-it-uc3m/l2sc-es/pkg/topologygenerator"
 	"github.com/Networks-it-uc3m/l2sc-es/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -40,8 +42,8 @@ type OCMClient struct {
 	kclient ctrlclient.Client
 }
 
-func (c *OCMClient) ApplyNetwork(network *l2sces.L2Network, namespace string) error {
-	fmt.Printf("Creating network %s", network.GetName())
+func (c *OCMClient) ApplyNetwork(network *l2scesv1.SliceNetwork, namespace string) error {
+	fmt.Printf("Creating network %s", network.Name)
 
 	namespace = utils.DefaultIfEmpty(namespace, "default")
 
@@ -50,83 +52,99 @@ func (c *OCMClient) ApplyNetwork(network *l2sces.L2Network, namespace string) er
 		return fmt.Errorf("failed to construct l2network: %v", err)
 	}
 
-	for _, cluster := range network.Clusters {
-		clusterNamespace := utils.DefaultIfEmpty(cluster.GetNamespace(), namespace)
+	for _, clusterName := range network.Spec.Clusters {
+		clusterNamespace := namespace
 
 		currentNetwork := l2network.DeepCopy()
 		currentNetwork.Namespace = clusterNamespace
 
-		if cluster.GetPodAddressPool() != "" {
-			currentNetwork.Spec.PodAddressRange = cluster.GetPodAddressPool()
-		}
-
 		manifest, err := toManifest(currentNetwork)
 		if err != nil {
-			return fmt.Errorf("failed to convert l2network manifest for cluster %s: %v", cluster.GetName(), err)
+			return fmt.Errorf("failed to convert l2network manifest for cluster %s: %v", clusterName, err)
 		}
 
-		work := newManifestWork(cluster.GetName(), currentNetwork.GetName(), manifest)
+		work := newManifestWork(clusterName, currentNetwork.GetName(), manifest)
 		if err := c.applyManifestWork(context.Background(), work); err != nil {
-			return fmt.Errorf("failed to apply ManifestWork for network %s on cluster %s: %v", currentNetwork.GetName(), cluster.GetName(), err)
+			return fmt.Errorf("failed to apply ManifestWork for network %s on cluster %s: %v", currentNetwork.GetName(), clusterName, err)
 		}
 	}
 
 	return nil
 }
 
-func (c *OCMClient) DeleteNetwork(network *l2sces.L2Network, namespace string) error {
+func (c *OCMClient) DeleteNetwork(network *l2scesv1.SliceNetwork, namespace string) error {
 	namespace = utils.DefaultIfEmpty(namespace, "default")
-	for _, cluster := range network.Clusters {
+	for _, clusterName := range network.Spec.Clusters {
 		workName := sanitizeManifestWorkName(network.GetName())
 		work := &workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      workName,
-				Namespace: cluster.GetName(),
+				Namespace: clusterName,
 			},
 		}
 		err := c.kclient.Delete(context.Background(), work)
 		if err != nil && ctrlclient.IgnoreNotFound(err) != nil {
-			return fmt.Errorf("error deleting ManifestWork %s in cluster namespace %s: %v", workName, cluster.GetName(), err)
+			return fmt.Errorf("error deleting ManifestWork %s in cluster namespace %s: %v", workName, clusterName, err)
 		}
 	}
 
 	return nil
 }
 
-func (c *OCMClient) ApplySlice(slice *l2sces.Slice, namespace string) error {
-	fmt.Printf("Creating slice %s", slice)
+func (c *OCMClient) ApplySlice(slice *l2scesv1.SliceOverlay, namespace string) error {
+	fmt.Printf("Creating slice %s", slice.Name)
 
 	namespace = utils.DefaultIfEmpty(namespace, "he-codeco-netma")
 
-	sliceClusters := slice.GetClusters()
-	sliceLinks := slice.GetLinks()
+	if slice.Spec.Topology == nil {
+		return fmt.Errorf("slice overlay %s has no topology", slice.Name)
+	}
+
+	sliceClusters := slice.Spec.Topology.Nodes
+	sliceLinks := slice.Spec.Topology.Links
+	if len(sliceLinks) == 0 && len(sliceClusters) > 1 {
+		sliceLinks = topologygenerator.GenerateTopology(getSliceClusterNames(sliceClusters))
+	}
 	clusterMaps := make(map[string]l2sminterface.NodeConfig, len(sliceClusters))
 
 	for _, cluster := range sliceClusters {
-		resolvedIP, err := c.getManagedClusterIPAddress(context.Background(), cluster.GetName())
-		if err != nil {
-			return fmt.Errorf("failed to resolve managed cluster endpoint for %s: %v", cluster.GetName(), err)
+		resolvedIP := ""
+		if cluster.Gateway != nil {
+			resolvedIP = cluster.Gateway.IPAddress
+		}
+		if resolvedIP == "" {
+			var err error
+			resolvedIP, err = c.getManagedClusterIPAddress(context.Background(), cluster.Name)
+			if err != nil {
+				return fmt.Errorf("failed to resolve managed cluster endpoint for %s: %v", cluster.Name, err)
+			}
 		}
 
-		clusterMaps[cluster.GetName()] = l2sminterface.NodeConfig{
+		clusterMaps[cluster.Name] = l2sminterface.NodeConfig{
 			NodeName:  cluster.Name,
 			IPAddress: resolvedIP,
 		}
 	}
 
+	provider := slice.Spec.Provider
+	if provider == nil {
+		provider = &l2smv1.ProviderSpec{}
+	}
 	nedGenerator := l2sminterface.NewNEDGenerator(l2sminterface.SDNController{
-		Name:    slice.GetProvider().GetName(),
-		Domain:  slice.GetProvider().GetDomain(),
-		SDNPort: slice.GetProvider().GetSdnPort(),
-		OFPort:  slice.GetProvider().GetOfPort(),
+		Name:        provider.Name,
+		Domain:      firstProviderDomain(provider),
+		SDNPort:     provider.SDNPort,
+		DNSPort:     provider.DNSPort,
+		OFPort:      provider.OFPort,
+		DNSGRPCPort: provider.DNSGRPCPort,
 	})
 
 	for _, cluster := range sliceClusters {
-		clusterNamespace := utils.DefaultIfEmpty(cluster.GetNamespace(), namespace)
+		clusterNamespace := namespace
 
 		clusterNeighbors := make([]l2sminterface.Neighbor, 0, len(sliceLinks))
 		for _, link := range sliceLinks {
-			switch cluster.GetName() {
+			switch cluster.Name {
 			case link.EndpointA:
 				clusterNeighbors = append(clusterNeighbors, l2sminterface.Neighbor{
 					Node:   clusterMaps[link.EndpointB].NodeName,
@@ -145,36 +163,55 @@ func (c *OCMClient) ApplySlice(slice *l2sces.Slice, namespace string) error {
 		})
 		ned.Namespace = clusterNamespace
 
-		manifest, err := toManifest(ned)
+		nedManifest, err := toManifest(ned)
 		if err != nil {
-			return fmt.Errorf("failed to convert NED manifest for cluster %s: %v", cluster.GetName(), err)
+			return fmt.Errorf("failed to convert NED manifest for cluster %s: %v", cluster.Name, err)
 		}
 
-		work := newManifestWork(cluster.GetName(), ned.GetName(), manifest)
+		work := newManifestWork(cluster.Name, slice.Name, nedManifest)
 		if err := c.applyManifestWork(context.Background(), work); err != nil {
-			return fmt.Errorf("failed to apply ManifestWork for slice cluster %s: %v", cluster.GetName(), err)
+			return fmt.Errorf("failed to apply ManifestWork for slice cluster %s: %v", cluster.Name, err)
 		}
 	}
 
 	return nil
 }
 
-func (c *OCMClient) DeleteSlice(slice *l2sces.Slice, namespace string) error {
-	workName := sanitizeManifestWorkName(slice.GetProvider().GetName() + "-ned")
-	for _, cluster := range slice.GetClusters() {
+func (c *OCMClient) DeleteSlice(slice *l2scesv1.SliceOverlay, namespace string) error {
+	if slice.Spec.Topology == nil {
+		return nil
+	}
+
+	workName := sanitizeManifestWorkName(slice.Name)
+	for _, cluster := range slice.Spec.Topology.Nodes {
 		work := &workv1.ManifestWork{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      workName,
-				Namespace: cluster.GetName(),
+				Namespace: cluster.Name,
 			},
 		}
 		err := c.kclient.Delete(context.Background(), work)
 		if err != nil && ctrlclient.IgnoreNotFound(err) != nil {
-			return fmt.Errorf("error deleting ManifestWork %s in cluster namespace %s: %v", workName, cluster.GetName(), err)
+			return fmt.Errorf("error deleting ManifestWork %s in cluster namespace %s: %v", workName, cluster.Name, err)
 		}
 	}
 
 	return nil
+}
+
+func getSliceClusterNames(clusters []l2scesv1.OverlayCluster) []string {
+	names := make([]string, 0, len(clusters))
+	for _, cluster := range clusters {
+		names = append(names, cluster.Name)
+	}
+	return names
+}
+
+func firstProviderDomain(provider *l2smv1.ProviderSpec) string {
+	if provider == nil || len(provider.Domain) == 0 {
+		return ""
+	}
+	return provider.Domain[0]
 }
 
 func (c *OCMClient) applyManifestWork(ctx context.Context, desired *workv1.ManifestWork) error {
