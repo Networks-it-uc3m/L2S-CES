@@ -54,6 +54,7 @@ message Slice {
     Provider provider = 1;
     repeated Cluster clusters = 2;
     repeated Link links = 3;
+    Monitor monitor = 4;
 }
 
 // Requests and Responses for Network
