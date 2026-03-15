@@ -20,32 +20,28 @@ import (
 	"net"
 
 	l2smv1 "github.com/Networks-it-uc3m/L2S-M/api/v1"
-	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
+	l2scesv1 "github.com/Networks-it-uc3m/l2sc-es/api/v1"
 	"github.com/Networks-it-uc3m/l2sc-es/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func ConstructL2NetworkFromL2smmd(network *l2sces.L2Network) (*l2smv1.L2Network, error) {
+func ConstructL2NetworkFromL2smmd(network *l2scesv1.SliceNetwork) (*l2smv1.L2Network, error) {
+	var provider *l2smv1.ProviderSpec
+	if network.Spec.Provider != nil {
+		provider = network.Spec.Provider.DeepCopy()
+	}
 
 	l2network := &l2smv1.L2Network{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       GetKind(L2Network), // Fix: Use the actual kind name, not the resource name
+			Kind:       GetKind(L2Network),
 			APIVersion: l2smv1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: network.Name,
 		},
 		Spec: l2smv1.L2NetworkSpec{
-			Type:   l2smv1.NetworkType(utils.DefaultIfEmpty(network.Type, "vnet")),
-			Config: &network.PodCidr,
-			Provider: &l2smv1.ProviderSpec{
-				Name:        network.Provider.Name,
-				Domain:      []string{network.Provider.Domain},
-				SDNPort:     network.Provider.SdnPort,
-				OFPort:      network.Provider.OfPort,
-				DNSGRPCPort: network.Provider.DnsGrpcPort,
-				DNSPort:     network.Provider.DnsPort,
-			},
+			Type:     l2smv1.NetworkType(utils.DefaultIfEmpty(string(network.Spec.Type), "vnet")),
+			Provider: provider,
 		},
 	}
 	return l2network, nil

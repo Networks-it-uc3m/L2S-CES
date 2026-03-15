@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	l2smv1 "github.com/Networks-it-uc3m/L2S-M/api/v1"
-	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
+	l2scesv1 "github.com/Networks-it-uc3m/l2sc-es/api/v1"
 	"github.com/Networks-it-uc3m/l2sc-es/pkg/topologygenerator"
 	"gopkg.in/yaml.v2"
 
@@ -118,37 +118,58 @@ func (overlayGenerator *OverlayGenerator) AddValues(byteValues []byte) error {
 	return nil
 }
 
-func ConstructOverlayFromL2smmd(overlay *l2sces.Overlay) *l2smv1.Overlay {
-
-	links := make([]l2smv1.Link, len(overlay.Links))
-
-	if len(overlay.Links) == 0 && len(overlay.Nodes) > 1 {
-		overlay.Links = topologygenerator.GenerateTopology(overlay.GetNodes())
+func ConstructOverlayFromL2smmd(slice *l2scesv1.SliceOverlay) *l2smv1.Overlay {
+	topology := &l2scesv1.OverlayTopology{}
+	if slice.Spec.Topology != nil {
+		topology = slice.Spec.Topology
 	}
 
-	for _, link := range overlay.Links {
-		l2Link := l2smv1.Link{EndpointA: link.EndpointA, EndpointB: link.EndpointB}
-		links = append(links, l2Link)
+	links := make([]l2smv1.Link, 0, len(topology.Links))
+	generatedLinks := topology.Links
+	if len(generatedLinks) == 0 && len(topology.Nodes) > 1 {
+		generatedLinks = topologygenerator.GenerateTopology(getOverlayNodeNames(topology.Nodes))
+	}
+
+	for _, link := range generatedLinks {
+		links = append(links, l2smv1.Link{EndpointA: link.EndpointA, EndpointB: link.EndpointB})
+	}
+
+	provider := defaultProvider()
+	if slice.Spec.Provider != nil {
+		provider = slice.Spec.Provider.DeepCopy()
+	}
+
+	switchTemplate := defaultSwitchTemplate()
+	if slice.Spec.SwitchTemplate != nil {
+		switchTemplate = slice.Spec.SwitchTemplate.DeepCopy()
 	}
 
 	l2overlay := &l2smv1.Overlay{
 		TypeMeta: metav1.TypeMeta{
-			Kind:       GetKind(Overlay), // Fix: Use the actual kind name, not the resource name
+			Kind:       GetKind(Overlay),
 			APIVersion: l2smv1.GroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "overlay-sample",
+			Name: slice.Name,
 		},
 		Spec: l2smv1.OverlaySpec{
-			Provider:       defaultProvider(),
-			SwitchTemplate: defaultSwitchTemplate(),
+			Provider:       provider,
+			SwitchTemplate: switchTemplate,
 			Topology: &l2smv1.TopologySpec{
-				Nodes: overlay.Nodes,
+				Nodes: getOverlayNodeNames(topology.Nodes),
 				Links: links,
 			},
 		},
 	}
 	return l2overlay
+}
+
+func getOverlayNodeNames(nodes []l2scesv1.OverlayCluster) []string {
+	names := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		names = append(names, node.Name)
+	}
+	return names
 }
 
 func defaultSwitchTemplate() *l2smv1.SwitchTemplateSpec {

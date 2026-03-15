@@ -15,16 +15,16 @@
 package topologygenerator
 
 import (
-	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
+	l2scesv1 "github.com/Networks-it-uc3m/l2sc-es/api/v1"
 )
 
-func GenerateTopology(nodes []string) []*l2sces.Link {
+func GenerateTopology(nodes []string) []l2scesv1.OverlayLink {
 	numNodes := len(nodes)
-	links := make([]*l2sces.Link, 0, numNodes*(numNodes-1)/2)
+	links := make([]l2scesv1.OverlayLink, 0, numNodes*(numNodes-1)/2)
 
 	for i := 0; i < numNodes; i++ {
 		for j := i + 1; j < numNodes; j++ {
-			link := &l2sces.Link{
+			link := l2scesv1.OverlayLink{
 				EndpointA: nodes[i],
 				EndpointB: nodes[j],
 			}
