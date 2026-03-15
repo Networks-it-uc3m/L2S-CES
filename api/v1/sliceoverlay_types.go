@@ -67,6 +67,8 @@ type SliceOverlaySpec struct {
 
 	// Topology defines the clusters involved and how they connect.
 	Topology *OverlayTopology `json:"topology"`
+
+	Monitoring *l2smv1.MonitorSpec `json:"monitor,omitempty"`
 }
 
 // SliceOverlayStatus defines the observed state of SliceOverlay.
