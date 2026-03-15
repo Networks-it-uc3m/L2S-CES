@@ -12,53 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// main.go
-
 package main
 
 import (
 	"log"
 	"net"
-	"path/filepath"
 
+	l2scesv1 "github.com/Networks-it-uc3m/l2sc-es/api/v1"
+	l2sces "github.com/Networks-it-uc3m/l2sc-es/internal/server"
 	"google.golang.org/grpc"
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/homedir"
-
-	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
-	"github.com/Networks-it-uc3m/l2sc-es/pkg/mdclient"
+	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func main() {
-	// Listen on port 50051
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
 
-	// Create a new gRPC server
 	grpcServer := grpc.NewServer()
 
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		// If in-cluster config is not available, try the local kubeconfig
-		config, err = clientcmd.BuildConfigFromFlags("", filepath.Join(homedir.HomeDir(), ".kube", "config"))
-		if err != nil {
-			log.Fatalf("could not create config from either in-cluster or kubeconfig: %v", err)
-		}
-	}
-	restcli, err := mdclient.NewClient(mdclient.RestType, config)
-	if err != nil {
-		log.Fatalf("Failed to create multi domain client: %v", err)
+		log.Fatalf("Failed to create in-cluster config: %v", err)
 	}
 
-	// Register the server with the gRPC server
-	l2sces.RegisterL2SMMultiDomainServiceServer(grpcServer, &server{MDClient: restcli})
+	scheme := runtime.NewScheme()
+	utilruntime.Must(l2scesv1.AddToScheme(scheme))
+
+	kclient, err := ctrlclient.New(config, ctrlclient.Options{Scheme: scheme})
+	if err != nil {
+		log.Fatalf("Failed to create API client: %v", err)
+	}
+
+	l2sces.RegisterL2SMMultiDomainServiceServer(grpcServer, &server{kclient: kclient})
 
 	log.Printf("Server listening at %v", lis.Addr())
-
-	// Start serving requests
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)
 	}
