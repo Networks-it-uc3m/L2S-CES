@@ -17,7 +17,7 @@ package l2sminterface
 import (
 	"fmt"
 
-	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
+	l2sces "github.com/Networks-it-uc3m/l2sc-es/internal/server"
 )
 
 func GetWorkloadPatchInstructions(networkName string) []*l2sces.FieldPatch {

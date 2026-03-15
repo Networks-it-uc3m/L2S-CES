@@ -35,7 +35,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	// Adjust import to point to where you keep your proto-generated code
-	"github.com/Networks-it-uc3m/l2sc-es/api/v1/l2sces"
+	l2sces "github.com/Networks-it-uc3m/l2sc-es/internal/server"
 )
 
 // main is the entry point for this client application

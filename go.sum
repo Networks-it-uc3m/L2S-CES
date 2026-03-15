@@ -1,7 +1,7 @@
 cel.dev/expr v0.24.0 h1:56OvJKSH3hDGL0ml5uSxZmz3/3Pq4tJ+fb1unVLAFcY=
 cel.dev/expr v0.24.0/go.mod h1:hLPLo1W4QUmuYdA72RBX06QTs6MXw941piREPl3Yfiw=
-github.com/Networks-it-uc3m/L2S-M v1.2.12 h1:+Je7gYUyazxjDHXeZfd9eQ6YTLbk1G9fgvnXFnMumPk=
-github.com/Networks-it-uc3m/L2S-M v1.2.12/go.mod h1:qhmWt5jzc+0xgFtxDbQplGOtZpsCgcJo9T0kO8/yOrQ=
+github.com/Networks-it-uc3m/L2S-M v1.2.13 h1:IPd/lkQy/o+Ii3dISLcvBPMeyCoCULT4R5yxl2zKBj8=
+github.com/Networks-it-uc3m/L2S-M v1.2.13/go.mod h1:iZlAHGChFazszn7tF7ev0kjxe+uRsxyKpko2nj/PGBM=
 github.com/antlr4-go/antlr/v4 v4.13.0 h1:lxCg3LAv+EUK6t1i0y1V6/SLeUi0eKEKdhQAlS8TVTI=
 github.com/antlr4-go/antlr/v4 v4.13.0/go.mod h1:pfChB/xh/Unjila75QW7+VU4TSnWnnk9UTnmpPaOR2g=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

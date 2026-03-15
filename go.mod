@@ -3,15 +3,15 @@ module github.com/Networks-it-uc3m/l2sc-es
 go 1.24.6
 
 require (
-	github.com/Networks-it-uc3m/L2S-M v1.2.12
+	github.com/Networks-it-uc3m/L2S-M v1.2.13
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.1
 	google.golang.org/grpc v1.72.1
 	google.golang.org/protobuf v1.36.5
-	open-cluster-management.io/api v1.1.0
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
+	open-cluster-management.io/api v1.1.0
 	sigs.k8s.io/controller-runtime v0.22.4
 )
 
