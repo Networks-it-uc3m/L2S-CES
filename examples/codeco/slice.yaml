@@ -38,6 +38,13 @@ spec:
             capabilities:
               add:
                 - "NET_ADMIN"
+  monitor:
+    exportMetric:
+      method: default
+    metrics:
+      - name: "rtt"
+      - name: "jitter"
+      - name: "throughput"
   topology:
     nodes:
       - name: cluster1
