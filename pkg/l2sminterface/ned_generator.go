@@ -23,8 +23,10 @@ import (
 const SWITCH_DOCKER_IMAGE = "alexdecb/l2sm-switch:1.2.9"
 
 type NEDValues struct {
-	NodeConfig *NodeConfig
-	Neighbors  []Neighbor
+	ClusterName    string
+	NodeConfig     *NodeConfig
+	Neighbors      []Neighbor
+	MonitoredNodes map[string]string
 }
 
 type SDNController struct {
@@ -47,8 +49,9 @@ type Neighbor struct {
 }
 
 type NEDGenerator struct {
-	SliceName string
-	Provider  SDNController
+	SliceName  string
+	Provider   SDNController
+	Monitoring *l2smv1.MonitorSpec
 }
 
 func NewNEDGenerator(sdnController SDNController) *NEDGenerator {
@@ -89,11 +92,17 @@ func (nedGenerator *NEDGenerator) ConstructNED(nedValues NEDValues) *l2smv1.Netw
 			IPAddress: nedValues.NodeConfig.IPAddress,
 		}
 	}
+	lpmIp, monitored := nedValues.MonitoredNodes[nedValues.ClusterName]
 
 	neighbors := make([]l2smv1.NeighborSpec, len(nedValues.Neighbors))
 	for i := range neighbors {
 		neighbors[i].Node = nedValues.Neighbors[i].Node
 		neighbors[i].Domain = nedValues.Neighbors[i].Domain
+		if monitored {
+			if neighLPMIp, ok := nedValues.MonitoredNodes[neighbors[i].Node]; ok {
+				neighbors[i].LpmIp = &neighLPMIp
+			}
+		}
 	}
 
 	ned := &l2smv1.NetworkEdgeDevice{
@@ -116,6 +125,11 @@ func (nedGenerator *NEDGenerator) ConstructNED(nedValues NEDValues) *l2smv1.Netw
 			NodeConfig: nodeConf,
 			Neighbors:  neighbors,
 		},
+	}
+
+	if monitored {
+		ned.Spec.Monitor = nedGenerator.Monitoring.DeepCopy()
+		ned.Spec.Monitor.IpCIDR = &lpmIp
 	}
 
 	return ned

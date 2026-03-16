@@ -16,6 +16,7 @@ package mdclient
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"net/url"
@@ -139,6 +140,20 @@ func (c *OCMClient) ApplySlice(slice *l2scesv1.SliceOverlay, namespace string) e
 		DNSGRPCPort: provider.DNSGRPCPort,
 	})
 
+	// monitored nodes is a map where k: node (cluster name) v: lpm ip address
+	monitoredNodes := make(map[string]string)
+	if slice.Spec.Monitoring != nil {
+		networkCIDR := "10.0.0.0/24"
+		if slice.Spec.Monitoring.NetworkCIDR != nil && *slice.Spec.Monitoring.NetworkCIDR != "" {
+			networkCIDR = *slice.Spec.Monitoring.NetworkCIDR
+		}
+		nedGenerator.Monitoring = slice.Spec.Monitoring
+		var err error
+		monitoredNodes, err = allocateMonitoringNodeIPs(networkCIDR, sliceClusters)
+		if err != nil {
+			return fmt.Errorf("failed to allocate monitoring IPs for slice %s: %w", slice.Name, err)
+		}
+	}
 	for _, cluster := range sliceClusters {
 		clusterNamespace := namespace
 
@@ -159,7 +174,9 @@ func (c *OCMClient) ApplySlice(slice *l2scesv1.SliceOverlay, namespace string) e
 		}
 
 		ned := nedGenerator.ConstructNED(l2sminterface.NEDValues{
-			Neighbors: clusterNeighbors,
+			Neighbors:      clusterNeighbors,
+			MonitoredNodes: monitoredNodes,
+			ClusterName:    cluster.Name,
 		})
 		ned.Namespace = clusterNamespace
 
@@ -286,6 +303,61 @@ func resolveEndpointToIP(endpoint string) (string, error) {
 	}
 
 	return "", fmt.Errorf("endpoint %q resolved without IP addresses", endpoint)
+}
+
+func allocateMonitoringNodeIPs(cidr string, clusters []l2scesv1.OverlayCluster) (map[string]string, error) {
+	if len(clusters) == 0 {
+		return map[string]string{}, nil
+	}
+
+	networkIP, ipnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid monitoring CIDR %q: %w", cidr, err)
+	}
+
+	baseIPv4 := networkIP.To4()
+	if baseIPv4 == nil {
+		return nil, fmt.Errorf("monitoring CIDR %q is not IPv4", cidr)
+	}
+
+	ones, bits := ipnet.Mask.Size()
+	if bits != 32 {
+		return nil, fmt.Errorf("unexpected mask size for monitoring CIDR %q", cidr)
+	}
+
+	totalAddresses := 1 << uint32(32-ones)
+	if totalAddresses < 4 {
+		return nil, fmt.Errorf("monitoring CIDR %q is too small or unsupported", cidr)
+	}
+
+	usableHosts := totalAddresses - 2
+	if len(clusters) > usableHosts {
+		return nil, fmt.Errorf(
+			"monitoring CIDR %q has %d usable addresses, but slice requires %d",
+			cidr,
+			usableHosts,
+			len(clusters),
+		)
+	}
+
+	baseUint := binary.BigEndian.Uint32(baseIPv4)
+	allocated := make(map[string]string, len(clusters))
+	for i, cluster := range clusters {
+		if cluster.Name == "" {
+			return nil, fmt.Errorf("slice contains a cluster with an empty name")
+		}
+
+		if _, exists := allocated[cluster.Name]; exists {
+			return nil, fmt.Errorf("slice contains duplicate cluster name %q", cluster.Name)
+		}
+
+		// Start from host offset 1 to avoid the network address.
+		ip := make(net.IP, net.IPv4len)
+		binary.BigEndian.PutUint32(ip, baseUint+uint32(i+1))
+		allocated[cluster.Name] = ip.String()
+	}
+
+	return allocated, nil
 }
 
 func newManifestWork(clusterName, objectName string, manifests ...workv1.Manifest) *workv1.ManifestWork {
