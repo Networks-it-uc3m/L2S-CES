@@ -261,6 +261,83 @@ spec:
           spec:
             description: spec defines the desired state of SliceOverlay
             properties:
+              monitor:
+                description: MonitorSpec configures the L2S-M Performance Measurement
+                  module.
+                properties:
+                  exportMetric:
+                    properties:
+                      config:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Additional configuration parameters that may be set by developer to implement different kinds
+                          of flexible key-value pairs. In the case of the codeco-swm, "namespace" is included.
+                        type: object
+                      method:
+                        default: default
+                        description: |-
+                          Method to export the metrics. Reserved names include: "codeco-swm", which includes an interface for the
+                          codeco swm crd. Interface must be implemented
+                          for the method, so this must be designed beforehand.
+                        type: string
+                      serviceAccount:
+                        default: default
+                        type: string
+                    type: object
+                  ipCIDR:
+                    type: string
+                  metrics:
+                    description: |-
+                      Metrics is the list of measurements to perform on the overlay network.
+                      Supports built-in metrics (rtt, jitter, throughput) and custom script-based metrics.
+                    items:
+                      description: Metric defines a specific network measurement task.
+                      properties:
+                        interval:
+                          description: |-
+                            Interval specifies the time in minutes between measurements.
+                            If not set (nil), the metric runs in "continuous mode", consuming the live stream of the measurement tool.
+                          type: integer
+                        name:
+                          description: |-
+                            Name identifies the metric.
+                            Reserved names: "rtt", "jitter", "throughput".
+                            If a reserved name is used, the internal Go implementation is used by default.
+                            If a custom name is used, 'scriptSource' is required.
+                          type: string
+                        scriptSource:
+                          description: |-
+                            ScriptSource points to a ConfigMap containing a shell script to execute for this metric.
+                            If provided, this script overrides the internal implementation (even for reserved names).
+                            The script must print the measurement value to stdout.
+                          properties:
+                            key:
+                              description: Key within the ConfigMap that contains
+                                the script (e.g., "measure.sh").
+                              type: string
+                            name:
+                              description: Name of the ConfigMap.
+                              type: string
+                          required:
+                          - key
+                          - name
+                          type: object
+                      required:
+                      - name
+                      type: object
+                    type: array
+                  networkCIDR:
+                    type: string
+                  spreadFactor:
+                    default: "0.2"
+                    description: |-
+                      SpreadFactor determines how metric execution is distributed over time to avoid congestion.
+                      A higher value spreads execution more widely.
+                    type: string
+                required:
+                - metrics
+                type: object
               provider:
                 description: |-
                   Provider contains the SDN Controller configuration (global for the slice).
