@@ -5648,6 +5648,32 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: sec-con-sec-con-controller-manager-ocm
+rules:
+- apiGroups:
+  - work.open-cluster-management.io
+  resources:
+  - manifestworks
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - cluster.open-cluster-management.io
+  resources:
+  - managedclusters
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: l2sces-init
@@ -5828,6 +5854,19 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: sec-con-metrics-auth-role
+subjects:
+- kind: ServiceAccount
+  name: sec-con-controller-manager
+  namespace: he-codeco-netma
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sec-con-sec-con-controller-manager-ocm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sec-con-sec-con-controller-manager-ocm
 subjects:
 - kind: ServiceAccount
   name: sec-con-controller-manager
