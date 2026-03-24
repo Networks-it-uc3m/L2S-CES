@@ -13,14 +13,14 @@
 # limitations under the License.
 
 apiVersion: l2sces.l2sm.io/v1
-kind: SliceNetwork
+kind: ProviderProfile
 metadata:
-  name: ping-network
-  namespace: default
+  name: default
+  namespace: he-codeco-netma
 spec:
-  clusters:
-    - cluster1
-    - cluster2
-  type: vnet
-  providerRef:
-    name: default
+  provider:
+    name: idco-controller
+    domain:
+      - 172.18.0.2
+    ofPort: "30663"
+    sdnPort: "30808"

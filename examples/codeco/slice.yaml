@@ -18,12 +18,8 @@ metadata:
   name: example-slice
   namespace: he-codeco-netma
 spec:
-  provider:
-    name: idco-controller
-    domain:
-      - 172.18.0.2
-    ofPort: "30663"
-    sdnPort: "30808"
+  providerRef:
+    name: default
   switchTemplate:
     spec:
       hostNetwork: true
