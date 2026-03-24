@@ -20,4 +20,9 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: slicenetwork-sample
 spec:
-  # TODO(user): Add fields here
+  clusters:
+  - cluster1
+  - cluster2
+  type: vnet
+  providerRef:
+    name: default

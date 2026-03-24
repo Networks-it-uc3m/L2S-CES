@@ -75,4 +75,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: alexdecb/l2sces
-  newTag: "0.4"
+  newTag: "0.5"

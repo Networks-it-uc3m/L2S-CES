@@ -21,6 +21,14 @@ rules:
 - apiGroups:
   - l2sces.l2sm.io
   resources:
+  - providerprofiles
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - l2sces.l2sm.io
+  resources:
   - slicenetworks
   - sliceoverlays
   verbs:

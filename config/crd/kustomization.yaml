@@ -16,6 +16,7 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
+- bases/l2sces.l2sm.io_providerprofiles.yaml
 - bases/l2sces.l2sm.io_sliceoverlays.yaml
 - bases/l2sces.l2sm.io_slicenetworks.yaml
 # +kubebuilder:scaffold:crdkustomizeresource

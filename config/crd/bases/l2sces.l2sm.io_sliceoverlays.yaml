@@ -144,6 +144,7 @@ spec:
                 description: |-
                   Provider contains the SDN Controller configuration (global for the slice).
                   This will be copied to every NetworkEdgeDevice.
+                  Deprecated: prefer providerRef and ProviderProfile resources for shared configuration.
                 properties:
                   dnsGrpcPort:
                     default: "30818"
@@ -170,6 +171,20 @@ spec:
                     type: string
                 required:
                 - domain
+                - name
+                type: object
+              providerRef:
+                description: ProviderRef references a shared ProviderProfile.
+                properties:
+                  name:
+                    description: Name is the name of the referenced ProviderProfile.
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace is the namespace of the referenced ProviderProfile.
+                      When omitted, the namespace of the referencing resource is used.
+                    type: string
+                required:
                 - name
                 type: object
               switchTemplate:

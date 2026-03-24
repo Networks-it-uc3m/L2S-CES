@@ -18,20 +18,24 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.19.0
-  name: slicenetworks.l2sces.l2sm.io
+  name: providerprofiles.l2sces.l2sm.io
 spec:
   group: l2sces.l2sm.io
   names:
-    kind: SliceNetwork
-    listKind: SliceNetworkList
-    plural: slicenetworks
-    singular: slicenetwork
+    kind: ProviderProfile
+    listKind: ProviderProfileList
+    plural: providerprofiles
+    singular: providerprofile
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
+    name: v1
     schema:
       openAPIV3Schema:
-        description: SliceNetwork is the Schema for the slicenetworks API
+        description: ProviderProfile is the Schema for shared provider configuration.
         properties:
           apiVersion:
             description: |-
@@ -51,20 +55,11 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of SliceNetwork
+            description: spec defines the desired state of ProviderProfile
             properties:
-              clusters:
-                description: |-
-                  Clusters is an array of configurations. The controller will create an L2Network
-                  in each of these clusters based on the provided Name, Type, and Provider.
-                items:
-                  type: string
-                minItems: 1
-                type: array
               provider:
-                description: |-
-                  Provider defines the provider's name and domain for the network in this cluster.
-                  Deprecated: prefer providerRef and ProviderProfile resources for shared configuration.
+                description: Provider contains the provider configuration shared by
+                  SliceNetwork and SliceOverlay.
                 properties:
                   dnsGrpcPort:
                     default: "30818"
@@ -93,62 +88,15 @@ spec:
                 - domain
                 - name
                 type: object
-              providerRef:
-                description: ProviderRef references a shared ProviderProfile.
-                properties:
-                  name:
-                    description: Name is the name of the referenced ProviderProfile.
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace is the namespace of the referenced ProviderProfile.
-                      When omitted, the namespace of the referencing resource is used.
-                    type: string
-                required:
-                - name
-                type: object
-              type:
-                description: Type specifies the type of L2Network to create in this
-                  cluster (e.g., ext-vnet, vnet, vlink).
-                enum:
-                - ext-vnet
-                - vnet
-                - vlink
-                type: string
-                x-kubernetes-preserve-unknown-fields: true
             required:
-            - clusters
-            - type
+            - provider
             type: object
           status:
-            description: status defines the observed state of SliceNetwork
+            description: status defines the observed state of ProviderProfile
             properties:
-              clusterStatuses:
-                description: ClusterStatuses tracks the status of the L2Network provisioning
-                  in each defined cluster.
-                items:
-                  description: SliceClusterStatus tracks the state of the L2Network
-                    in a specific cluster.
-                  properties:
-                    clusterName:
-                      description: ClusterName is the name of the cluster this status
-                        refers to.
-                      type: string
-                    message:
-                      description: Message provides details about the status, useful
-                        for debugging errors.
-                      type: string
-                    status:
-                      description: Status represents the current state of the L2Network
-                        in that cluster (e.g., "Ready", "Pending", "Error").
-                      type: string
-                  required:
-                  - clusterName
-                  type: object
-                type: array
               conditions:
-                description: Conditions represent the current global state of the
-                  SliceNetwork resource.
+                description: Conditions represent the current state of the ProviderProfile
+                  resource.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

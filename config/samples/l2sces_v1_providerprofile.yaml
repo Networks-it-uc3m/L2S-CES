@@ -12,8 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-## Append samples of your project ##
-resources:
-- l2sces_v1_providerprofile.yaml
-- l2sces_v1_slicenetwork.yaml
-# +kubebuilder:scaffold:manifestskustomizesamples
+apiVersion: l2sces.l2sm.io/v1
+kind: ProviderProfile
+metadata:
+  labels:
+    app.kubernetes.io/name: l2sces-init
+    app.kubernetes.io/managed-by: kustomize
+  name: default
+spec:
+  provider:
+    name: idco-controller
+    domain:
+      - 172.18.0.2
+    ofPort: "30663"
+    sdnPort: "30808"
