@@ -160,6 +160,8 @@ kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 	
+.PHONY: setup
+setup: create-control-plane create-workers add-cni install-l2sm
 .PHONY: setup-dev
 setup-dev: create-control-plane create-workers add-cni install-l2sm deploy-dev
 	@echo "Development environment successfully set up."

@@ -46,7 +46,11 @@ type SliceNetworkSpec struct {
 	// Type specifies the type of L2Network to create in this cluster (e.g., ext-vnet, vnet, vlink).
 	Type l2smv1.NetworkType `json:"type"`
 
+	// ProviderRef references a shared ProviderProfile.
+	ProviderRef *ProviderReference `json:"providerRef,omitempty"`
+
 	// Provider defines the provider's name and domain for the network in this cluster.
+	// Deprecated: prefer providerRef and ProviderProfile resources for shared configuration.
 	Provider *l2smv1.ProviderSpec `json:"provider,omitempty"`
 }
 

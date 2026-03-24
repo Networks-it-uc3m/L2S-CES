@@ -57,8 +57,12 @@ type SliceOverlaySpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// ProviderRef references a shared ProviderProfile.
+	ProviderRef *ProviderReference `json:"providerRef,omitempty"`
+
 	// Provider contains the SDN Controller configuration (global for the slice).
 	// This will be copied to every NetworkEdgeDevice.
+	// Deprecated: prefer providerRef and ProviderProfile resources for shared configuration.
 	Provider *l2smv1.ProviderSpec `json:"provider,omitempty"`
 
 	// SwitchTemplate describes the virtual switch pod that will be deployed in every cluster.

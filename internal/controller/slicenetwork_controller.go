@@ -22,10 +22,13 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	l2scesv1 "github.com/Networks-it-uc3m/l2sc-es/api/v1"
 	"github.com/Networks-it-uc3m/l2sc-es/pkg/mdclient"
@@ -43,6 +46,7 @@ type SliceNetworkReconciler struct {
 // +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=slicenetworks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=slicenetworks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=slicenetworks/finalizers,verbs=update
+// +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=providerprofiles,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -92,7 +96,15 @@ func (r *SliceNetworkReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	if err := r.MDClient.ApplyNetwork(sliceNetwork, sliceNetwork.Namespace); err != nil {
+	resolvedNetwork := sliceNetwork.DeepCopy()
+	resolvedProvider, err := resolveNetworkProvider(ctx, r.Client, sliceNetwork)
+	if err != nil {
+		log.Error(err, "failed to resolve provider", "sliceNetwork", req.NamespacedName)
+		return ctrl.Result{}, err
+	}
+	resolvedNetwork.Spec.Provider = resolvedProvider
+
+	if err := r.MDClient.ApplyNetwork(resolvedNetwork, sliceNetwork.Namespace); err != nil {
 		log.Error(err, "failed to apply network", "sliceNetwork", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
@@ -113,6 +125,53 @@ func (r *SliceNetworkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&l2scesv1.SliceNetwork{}).
+		Watches(
+			&l2scesv1.ProviderProfile{},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForProviderProfile),
+		).
 		Named("slicenetwork").
 		Complete(r)
+}
+
+func (r *SliceNetworkReconciler) requestsForProviderProfile(ctx context.Context, obj client.Object) []reconcile.Request {
+	profile, ok := obj.(*l2scesv1.ProviderProfile)
+	if !ok {
+		return nil
+	}
+
+	networkList := &l2scesv1.SliceNetworkList{}
+	if err := r.List(ctx, networkList); err != nil {
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(networkList.Items))
+	for _, network := range networkList.Items {
+		if network.Spec.Provider != nil {
+			continue
+		}
+
+		if network.Spec.ProviderRef == nil {
+			if profile.Name != defaultProviderProfileName || profile.Namespace != network.Namespace {
+				continue
+			}
+		} else {
+			refNamespace := network.Namespace
+			if network.Spec.ProviderRef.Namespace != "" {
+				refNamespace = network.Spec.ProviderRef.Namespace
+			}
+			refName := network.Spec.ProviderRef.Name
+			if refName == "" {
+				refName = defaultProviderProfileName
+			}
+			if refNamespace != profile.Namespace || refName != profile.Name {
+				continue
+			}
+		}
+
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: network.Name, Namespace: network.Namespace},
+		})
+	}
+
+	return requests
 }

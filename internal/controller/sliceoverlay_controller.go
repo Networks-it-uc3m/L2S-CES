@@ -22,11 +22,14 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	l2scesv1 "github.com/Networks-it-uc3m/l2sc-es/api/v1"
 	"github.com/Networks-it-uc3m/l2sc-es/internal/env"
@@ -45,6 +48,7 @@ type SliceOverlayReconciler struct {
 // +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=sliceoverlays,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=sliceoverlays/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=sliceoverlays/finalizers,verbs=update
+// +kubebuilder:rbac:groups=l2sces.l2sm.io,resources=providerprofiles,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -94,7 +98,15 @@ func (r *SliceOverlayReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	if err := r.MDClient.ApplySlice(sliceOverlay, sliceOverlay.Namespace); err != nil {
+	resolvedOverlay := sliceOverlay.DeepCopy()
+	resolvedProvider, err := resolveOverlayProvider(ctx, r.Client, sliceOverlay)
+	if err != nil {
+		log.Error(err, "failed to resolve provider", "sliceOverlay", req.NamespacedName)
+		return ctrl.Result{}, err
+	}
+	resolvedOverlay.Spec.Provider = resolvedProvider
+
+	if err := r.MDClient.ApplySlice(resolvedOverlay, sliceOverlay.Namespace); err != nil {
 		log.Error(err, "failed to apply slice", "sliceOverlay", req.NamespacedName)
 		return ctrl.Result{}, err
 	}
@@ -119,6 +131,10 @@ func (r *SliceOverlayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&l2scesv1.SliceOverlay{}).
+		Watches(
+			&l2scesv1.ProviderProfile{},
+			handler.EnqueueRequestsFromMapFunc(r.requestsForProviderProfile),
+		).
 		Named("sliceoverlay").
 		Complete(r)
 }
@@ -126,4 +142,47 @@ func (r *SliceOverlayReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func newMDClient(config *rest.Config) (mdclient.MDClient, error) {
 	clientType := mdclient.ClientType(env.GetMultiDomainClientType())
 	return mdclient.NewClient(clientType, config)
+}
+
+func (r *SliceOverlayReconciler) requestsForProviderProfile(ctx context.Context, obj client.Object) []reconcile.Request {
+	profile, ok := obj.(*l2scesv1.ProviderProfile)
+	if !ok {
+		return nil
+	}
+
+	overlayList := &l2scesv1.SliceOverlayList{}
+	if err := r.List(ctx, overlayList); err != nil {
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(overlayList.Items))
+	for _, overlay := range overlayList.Items {
+		if overlay.Spec.Provider != nil {
+			continue
+		}
+
+		if overlay.Spec.ProviderRef == nil {
+			if profile.Name != defaultProviderProfileName || profile.Namespace != overlay.Namespace {
+				continue
+			}
+		} else {
+			refNamespace := overlay.Namespace
+			if overlay.Spec.ProviderRef.Namespace != "" {
+				refNamespace = overlay.Spec.ProviderRef.Namespace
+			}
+			refName := overlay.Spec.ProviderRef.Name
+			if refName == "" {
+				refName = defaultProviderProfileName
+			}
+			if refNamespace != profile.Namespace || refName != profile.Name {
+				continue
+			}
+		}
+
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{Name: overlay.Name, Namespace: overlay.Namespace},
+		})
+	}
+
+	return requests
 }
