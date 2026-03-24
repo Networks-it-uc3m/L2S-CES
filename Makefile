@@ -1,5 +1,5 @@
 # Image URL to use for building/pushing
-IMG ?= alexdecb/l2sces:0.4
+IMG ?= alexdecb/l2sces:0.5
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
 
