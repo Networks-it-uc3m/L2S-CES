@@ -15,6 +15,8 @@
 package l2sminterface
 
 import (
+	"net"
+
 	l2smv1 "github.com/Networks-it-uc3m/L2S-M/api/v1"
 	"github.com/Networks-it-uc3m/l2sc-es/internal/env"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +28,7 @@ type NEDValues struct {
 	ClusterName    string
 	NodeConfig     *NodeConfig
 	Neighbors      []Neighbor
-	MonitoredNodes map[string]string
+	MonitoredNodes map[string]net.IPNet
 }
 
 type SDNController struct {
@@ -100,7 +102,8 @@ func (nedGenerator *NEDGenerator) ConstructNED(nedValues NEDValues) *l2smv1.Netw
 		neighbors[i].Domain = nedValues.Neighbors[i].Domain
 		if monitored {
 			if neighLPMIp, ok := nedValues.MonitoredNodes[neighbors[i].Node]; ok {
-				neighbors[i].LpmIp = &neighLPMIp
+				ip := neighLPMIp.IP.String()
+				neighbors[i].LpmIp = &ip
 			}
 		}
 	}
@@ -129,7 +132,9 @@ func (nedGenerator *NEDGenerator) ConstructNED(nedValues NEDValues) *l2smv1.Netw
 
 	if monitored {
 		ned.Spec.Monitor = nedGenerator.Monitoring.DeepCopy()
-		ned.Spec.Monitor.IpCIDR = &lpmIp
+		// as ip, we take the ip cidr entirely, 10.0.0.4/24 for instance
+		ip := lpmIp.String()
+		ned.Spec.Monitor.IpCIDR = &ip
 	}
 
 	return ned

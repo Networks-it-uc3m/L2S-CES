@@ -141,7 +141,7 @@ func (c *OCMClient) ApplySlice(slice *l2scesv1.SliceOverlay, namespace string) e
 	})
 
 	// monitored nodes is a map where k: node (cluster name) v: lpm ip address
-	monitoredNodes := make(map[string]string)
+	monitoredNodes := make(map[string]net.IPNet)
 	if slice.Spec.Monitoring != nil {
 		networkCIDR := "10.0.0.0/24"
 		if slice.Spec.Monitoring.NetworkCIDR != nil && *slice.Spec.Monitoring.NetworkCIDR != "" {
@@ -305,9 +305,12 @@ func resolveEndpointToIP(endpoint string) (string, error) {
 	return "", fmt.Errorf("endpoint %q resolved without IP addresses", endpoint)
 }
 
-func allocateMonitoringNodeIPs(cidr string, clusters []l2scesv1.OverlayCluster) (map[string]string, error) {
+func allocateMonitoringNodeIPs(
+	cidr string,
+	clusters []l2scesv1.OverlayCluster,
+) (map[string]net.IPNet, error) {
 	if len(clusters) == 0 {
-		return map[string]string{}, nil
+		return map[string]net.IPNet{}, nil
 	}
 
 	networkIP, ipnet, err := net.ParseCIDR(cidr)
@@ -341,7 +344,8 @@ func allocateMonitoringNodeIPs(cidr string, clusters []l2scesv1.OverlayCluster) 
 	}
 
 	baseUint := binary.BigEndian.Uint32(baseIPv4)
-	allocated := make(map[string]string, len(clusters))
+	allocated := make(map[string]net.IPNet, len(clusters))
+
 	for i, cluster := range clusters {
 		if cluster.Name == "" {
 			return nil, fmt.Errorf("slice contains a cluster with an empty name")
@@ -351,10 +355,13 @@ func allocateMonitoringNodeIPs(cidr string, clusters []l2scesv1.OverlayCluster) 
 			return nil, fmt.Errorf("slice contains duplicate cluster name %q", cluster.Name)
 		}
 
-		// Start from host offset 1 to avoid the network address.
 		ip := make(net.IP, net.IPv4len)
 		binary.BigEndian.PutUint32(ip, baseUint+uint32(i+1))
-		allocated[cluster.Name] = ip.String()
+
+		allocated[cluster.Name] = net.IPNet{
+			IP:   ip,
+			Mask: ipnet.Mask,
+		}
 	}
 
 	return allocated, nil
